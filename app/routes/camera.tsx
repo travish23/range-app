@@ -9,6 +9,13 @@ export default function CameraRoute() {
   // Start the camera with the specified device ID
   async function startCamera(deviceId?: string) {
     try {
+      // Stop the current stream if it exists
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach((track) => track.stop());
+      }
+
+      // Start the new stream
       const constraints: MediaStreamConstraints = {
         video: deviceId ? { deviceId: { exact: deviceId } } : true,
       };
@@ -23,13 +30,22 @@ export default function CameraRoute() {
 
   // Enumerate available cameras
   async function enumerateCameras() {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter((device) => device.kind === "videoinput");
-    setDevices(videoDevices);
-    if (videoDevices.length > 0) {
-      setCurrentDeviceId(videoDevices[0].deviceId);
-      setIsFrontCamera(videoDevices[0].label.toLowerCase().includes("front"));
-      startCamera(videoDevices[0].deviceId);
+    try {
+      // Request camera access first
+      await navigator.mediaDevices.getUserMedia({ video: true });
+
+      // Enumerate devices
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter((device) => device.kind === "videoinput");
+      setDevices(videoDevices);
+
+      if (videoDevices.length > 0) {
+        setCurrentDeviceId(videoDevices[0].deviceId);
+        setIsFrontCamera(videoDevices[0].label.toLowerCase().includes("front"));
+        startCamera(videoDevices[0].deviceId);
+      }
+    } catch (error) {
+      console.error("Error enumerating cameras:", error);
     }
   }
 
