@@ -39,12 +39,16 @@ export default function CameraRoute() {
       <div>
         {isMobileDevice ? (
           <div>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              style={{ width: '100%', height: 'auto' }}
-            />
+           <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            style={{
+              width: "100%",
+              height: "auto",
+              transform: cameraFacingMode === "user" ? "scaleX(-1)" : "none", // Flip video if front camera
+            }}
+          />
             <button onClick={toggleCamera}>Flip Camera</button>
           </div>
         ) : (
