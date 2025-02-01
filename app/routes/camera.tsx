@@ -1,45 +1,107 @@
 import { useEffect, useRef, useState } from "react";
+import * as cocoSsd from "@tensorflow-models/coco-ssd";
+import * as tf from "@tensorflow/tfjs";
 
 export default function CameraRoute() {
-    const [isMobileDevice, setIsMobileDevice] = useState(false);
-    const [cameraFacingMode, setCameraFacingMode] = useState('environment');
-    const videoRef = useRef<HTMLVideoElement>(null);
-  
-    useEffect(() => {
-      // Detect if the device is mobile
-      setIsMobileDevice(/Mobi|Android/i.test(navigator.userAgent));
-    }, []);
-  
-    useEffect(() => {
-      // Get the user's camera stream based on facingMode (front or back)
-      if (isMobileDevice) {
-        navigator.mediaDevices
-          .getUserMedia({
-            video: { facingMode: cameraFacingMode },
-          })
-          .then((stream: any) => {
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream;
-            }
-          })
-          .catch((err) => {
-            console.error('Error accessing camera:', err);
-          });
-      }
-    }, [isMobileDevice, cameraFacingMode]);
-  
-    const toggleCamera = () => {
-      // Toggle between front and back camera
-      setCameraFacingMode((prev) =>
-        prev === 'environment' ? 'user' : 'environment'
-      );
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState("environment");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Detect if the device is mobile
+  useEffect(() => {
+    setIsMobileDevice(/Mobi|Android/i.test(navigator.userAgent));
+  }, []);
+
+  // Load the Coco-SSD model when the component mounts
+  useEffect(() => {
+    // Load TensorFlow.js and the Coco-SSD model
+    const loadModel = async () => {
+      await tf.ready(); // Wait for TensorFlow.js to load
+      const model = await cocoSsd.load();
+      console.log("Coco-SSD model loaded.");
+      detectObjects(model);
     };
-  
-    return (
-      <div>
-        {isMobileDevice ? (
-          <div>
-           <video
+
+    loadModel();
+  }, []);
+
+  // Function to start the video stream and detect objects
+  const detectObjects = async (model: any) => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext("2d");
+
+      // Set up the video stream
+      navigator.mediaDevices
+        .getUserMedia({
+          video: { facingMode: cameraFacingMode },
+        })
+        .then((stream: any) => {
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+        })
+        .catch((err) => {
+          console.error("Error accessing camera:", err);
+        });
+
+      // Set the canvas size to match the video dimensions
+      video.addEventListener("play", () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        // Detect objects on each frame
+        const detectFrame = async () => {
+          // Run object detection on the current frame
+          const predictions = await model.detect(video);
+          console.log(predictions)
+          // Clear the canvas and draw the frame and detections
+          context?.clearRect(0, 0, canvas.width, canvas.height);
+          context?.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          // Draw bounding boxes around detected objects
+          predictions.forEach((prediction: any) => {
+            context?.beginPath();
+            context?.rect(
+              prediction.bbox[0],
+              prediction.bbox[1],
+              prediction.bbox[2],
+              prediction.bbox[3]
+            );
+            if (!context) return;
+            context.lineWidth = 2;
+            context.strokeStyle = "red";
+            context.stroke();
+            context.fillStyle = "red";
+            context.fillText(
+              `${prediction.class} (${Math.round(prediction.score * 100)}%)`,
+              prediction.bbox[0],
+              prediction.bbox[1] > 10 ? prediction.bbox[1] - 5 : 10
+            );
+          });
+
+          // Call detectFrame again to keep detecting in a loop
+          requestAnimationFrame(detectFrame);
+        };
+
+        detectFrame(); // Start the detection loop
+      });
+    }
+  };
+
+  // Toggle between front and back camera
+  const toggleCamera = () => {
+    setCameraFacingMode((prev) =>
+      prev === "environment" ? "user" : "environment"
+    );
+  };
+
+  return (
+    <div>
+        <div>
+          <video
             ref={videoRef}
             autoPlay
             playsInline
@@ -49,107 +111,9 @@ export default function CameraRoute() {
               transform: cameraFacingMode === "user" ? "scaleX(-1)" : "none", // Flip video if front camera
             }}
           />
-            <button onClick={toggleCamera}>Flip Camera</button>
-          </div>
-        ) : (
-          <p>This feature is only available on mobile devices.</p>
-        )}
-      </div>
-    );
-  }
-  
-  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//   const videoRef = useRef<HTMLVideoElement>(null);
-//   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-//   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
-//   const [isFrontCamera, setIsFrontCamera] = useState<boolean>(false);
-
-//   // Start the camera with the specified device ID
-//   async function startCamera(deviceId?: string) {
-//     try {
-//       // Stop the current stream if it exists
-//       if (videoRef.current && videoRef.current.srcObject) {
-//         const stream = videoRef.current.srcObject as MediaStream;
-//         stream.getTracks().forEach((track) => track.stop());
-//       }
-
-//       // Start the new stream
-//       const constraints: MediaStreamConstraints = {
-//         video: deviceId ? { deviceId: { exact: deviceId } } : true,
-//       };
-//       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-//       if (videoRef.current) {
-//         videoRef.current.srcObject = stream;
-//       }
-//     } catch (error) {
-//       console.error("Error accessing the camera:", error);
-//     }
-//   }
-
-//   // Enumerate available cameras
-//   async function enumerateCameras() {
-//     try {
-//       // Request camera access first
-//       await navigator.mediaDevices.getUserMedia({ video: true });
-
-//       // Enumerate devices
-//       const devices = await navigator.mediaDevices.enumerateDevices();
-//       const videoDevices = devices.filter((device) => device.kind === "videoinput");
-//       setDevices(videoDevices);
-
-//       if (videoDevices.length > 0) {
-//         setCurrentDeviceId(videoDevices[0].deviceId);
-//         setIsFrontCamera(videoDevices[0].label.toLowerCase().includes("front"));
-//         startCamera(videoDevices[0].deviceId);
-//       }
-//     } catch (error) {
-//       console.error("Error enumerating cameras:", error);
-//     }
-//   }
-
-//   const flipCamera = () => {
-
-//     if (devices.length > 1) {
-//       const currentIndex = devices.findIndex((device) => device.deviceId === currentDeviceId);
-//       const nextDevice = devices[(currentIndex + 1) % devices.length];
-//       setCurrentDeviceId(nextDevice.deviceId);
-//       setIsFrontCamera(nextDevice.label.toLowerCase().includes("front"));
-//       startCamera(nextDevice.deviceId);
-//     }
-//   };
-
-//   useEffect(() => {
-//     enumerateCameras();
-//   }, []);
-
-//   return (
-//     <div>
-//       <h1>Camera</h1>
-//       <video
-//         ref={videoRef}
-//         autoPlay
-//         playsInline
-//         style={{
-//           transform: isFrontCamera ? "none" : "none",
-//         }}
-//       />
-//       <button onClick={flipCamera}>Flip Camera</button>
-//     </div>
-//   );
-
-//  }
-//  export default CameraComponent;
+          <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0 }} />
+          <button onClick={toggleCamera}>Flip Camera</button>
+        </div>
+    </div>
+  );
+}
